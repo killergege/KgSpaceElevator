@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31515.178
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SpaceElevator", "SpaceElevator.csproj", "{314C0A16-FA5F-45C2-A51C-9598CAEB99FD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{314C0A16-FA5F-45C2-A51C-9598CAEB99FD}.Debug|x64.ActiveCfg = Debug|x64
+		{314C0A16-FA5F-45C2-A51C-9598CAEB99FD}.Debug|x64.Build.0 = Debug|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {39436401-F9A4-4F40-9489-76C01B762193}
+	EndGlobalSection
+EndGlobal
