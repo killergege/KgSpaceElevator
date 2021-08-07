@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using VRage;
@@ -20,22 +21,16 @@ using VRageMath;
 
 namespace IngameScript
 {
-    // detecter l'état
-    // constantiser tout
-    // plusieurs pistons sur le mm bras (chainer les pistons)
+    // constantiser tout => https://github.com/malware-dev/MDK-SE/wiki/Handling-configuration-and-storage
     // nb max d'itération ou 0
 
     partial class Program : MyGridProgram
     {
-        // In order to add a new utility class, right-click on your project, 
-        // select 'New' then 'Add Item...'. Now find the 'Space Engineers'
-        // category under 'Visual C# Items' on the left hand side, and select
-        // 'Utility Class' in the main area.
         // https://github.com/malware-dev/MDK-SE/wiki/Quick-Introduction-to-Space-Engineers-Ingame-Scripts
-
 
         public enum Steps
         {
+            None,
             RightDisconnect,
             PistonExtend,
             RightConnect,
@@ -47,17 +42,21 @@ namespace IngameScript
         private Steps CurrentStep;
         private IMyShipMergeBlock rightMergeBlock;
         private IMyShipMergeBlock leftMergeBlock;
-        private IMyExtendedPistonBase leftPiston;
-        private IMyExtendedPistonBase rightPiston;
+        private PistonGroup pistons;
         private IMyProjector projector;
         private IMyShipConnector connector;
         private List<IMyShipWelder> welders;
-        private List<IMyShipGrinder> grinders;        
+        private List<IMyShipGrinder> grinders;
+        private IMyTextPanel lcdPanel;
 
+
+        //Technical
         private Steps PreviousStep;
         private int Wait = 0;
         private bool Initialized = false;
-        private List<string> EchoStrings= new List<string>();
+        private DateTime StartTime = DateTime.MinValue;
+        private double Distance = 0;
+        private LogManager Logs;
 
         public Program()
         {
@@ -65,6 +64,7 @@ namespace IngameScript
             // always before any other method is called. Use it to
             // initialize your script. 
             Runtime.UpdateFrequency = UpdateFrequency.None;
+            Logs = new LogManager(content => Echo(content));
         }
 
         public void Save()
@@ -84,7 +84,7 @@ namespace IngameScript
             {
                 Runtime.UpdateFrequency = UpdateFrequency.None;
             }
-            if(argument == "start")
+            if (argument == "start")
             {
                 Runtime.UpdateFrequency = UpdateFrequency.Update10;
                 CurrentStep = CalculateCurrentStep();
@@ -92,182 +92,197 @@ namespace IngameScript
 
             // -----------------
 
-            if(CurrentStep != PreviousStep)
-                EchoStrings.Add($"CurrentStep = {CurrentStep}");
+            if (CurrentStep != PreviousStep)
+                Logs.Add($"CurrentStep = {CurrentStep}");
             PreviousStep = CurrentStep;
 
             switch (CurrentStep)
             {
                 case Steps.RightDisconnect:
+                    StartTime = DateTime.Now;
+                    Distance = CalculateDistance(rightMergeBlock, Me);
                     if (rightMergeBlock.Enabled)
                     {
-                        EchoStrings.Add("Right Merge Disable");
+                        Logs.Add("Right Merge Disable");
                         rightMergeBlock.Enabled = false;
                         break;
                     }
-                    //wait step ?
                     if (rightMergeBlock.Enabled == false)
                     {
-                        EchoStrings.Add("Right Merge Disabled");
+                        Logs.Add("Right Merge Disabled");
                         CurrentStep++;
                     }
                     break;
                 case Steps.PistonExtend:
-                    if (rightPiston.Status != PistonStatus.Extended && rightPiston.Status != PistonStatus.Extending)
+                    if (pistons.Status != PistonStatus.Extended)
                     {
-                        EchoStrings.Add("Piston Extend");
-                        rightPiston.Extend();
+                        //EchoStrings.Add("Piston Extend");
+                        pistons.Extend();
                     }
-                    if (rightPiston.Status == PistonStatus.Extended) 
+                    if (pistons.Status == PistonStatus.Extended)
                     {
-                        EchoStrings.Add("Piston extended");
+                        Logs.Add("Piston extended");
                         CurrentStep++;
                     }
                     break;
                 case Steps.RightConnect:
                     if (rightMergeBlock.Enabled == false)
                     {
-                        EchoStrings.Add("Right Merge Enable");
+                        Logs.Add("Right Merge Enable");
                         rightMergeBlock.Enabled = true;
                         Wait = 10;
                         break;
                     }
-                    //wait ?
+                    if (projector.RemainingBlocks > 0)
+                    {                        
+                        Logs.Add($"Could not build all blocks (remaining : {projector.RemainingBlocks}) !");
+                        Runtime.UpdateFrequency = UpdateFrequency.None;
+                    }
                     if (rightMergeBlock.Enabled && rightMergeBlock.IsConnected && Wait == 0)
                     {
-                        EchoStrings.Add("Right Merge Enabled");
+                        Logs.Add("Right Merge Enabled");
                         CurrentStep++;
                     }
                     break;
                 case Steps.LeftDisconnect:
-                    if(connector.Status == MyShipConnectorStatus.Connected)
+                    if (connector.Status == MyShipConnectorStatus.Connected)
                     {
-                        EchoStrings.Add("Connector Disconnect");
+                        Logs.Add("Connector Disconnect");
                         connector.Disconnect();
                     }
-                    if(connector.Status != MyShipConnectorStatus.Connected && connector.Enabled)
+                    if (connector.Status != MyShipConnectorStatus.Connected && connector.Enabled)
                     {
-                        EchoStrings.Add("Connector Disable");
+                        Logs.Add("Connector Disable");
                         connector.Enabled = false;
                     }
                     if (projector.Enabled)
                     {
-                        EchoStrings.Add("Projector disable");
+                        Logs.Add("Projector disable");
                         projector.Enabled = false;
                     }
                     if (leftMergeBlock.Enabled)
                     {
-                        EchoStrings.Add("Left Merge Disable");
+                        Logs.Add("Left Merge Disable");
                         leftMergeBlock.Enabled = false;
                         break;
                     }
-                    //wait ?
                     if (leftMergeBlock.Enabled == false && connector.Status != MyShipConnectorStatus.Connected && connector.Enabled == false)
                     {
-                        EchoStrings.Add("Left Merge Disabled");
-                        EchoStrings.Add("Connector Disconnected");
+                        Logs.Add("Left Merge Disabled");
+                        Logs.Add("Connector Disconnected");
                         CurrentStep++;
                     }
                     break;
                 case Steps.PistonRetract:
-                    if (rightPiston.Status != PistonStatus.Retracted && rightPiston.Status != PistonStatus.Retracting)
+                    if (pistons.Status != PistonStatus.Retracted)
                     {
-                        EchoStrings.Add("Piston Retract");
-                        rightPiston.Retract();
+                        //EchoStrings.Add("Piston Retract");
+                        pistons.Retract();
                     }
-                    if (rightPiston.Status == PistonStatus.Retracted)
+                    if (pistons.Status == PistonStatus.Retracted)
                     {
-                        EchoStrings.Add("Piston Retracted");
+                        Logs.Add("Piston Retracted");
                         CurrentStep++;
                     }
                     break;
                 case Steps.LeftConnect:
-                    if(connector.Enabled == false)
+                    if (connector.Enabled == false)
                     {
-                        EchoStrings.Add("Connector enable");
+                        Logs.Add("Connector enable");
                         connector.Enabled = true;
                     }
-                    if(connector.Status == MyShipConnectorStatus.Connectable)
+                    if (connector.Status == MyShipConnectorStatus.Connectable)
                     {
-                        EchoStrings.Add("Connector Connect");
+                        Logs.Add("Connector Connect");
                         connector.Connect();
                     }
                     else
                     {
-                        EchoStrings.Add("CONNECTOR CANNOT BE CONNECTED");
+                        Logs.Add("CONNECTOR CANNOT BE CONNECTED");
                     }
                     if (!projector.Enabled)
                     {
-                        EchoStrings.Add("Projector Enable");
+                        Logs.Add("Projector Enable");
                         projector.Enabled = true;
                     }
                     if (leftMergeBlock.Enabled == false)
                     {
-                        EchoStrings.Add("Left Merge Enable");
+                        Logs.Add("Left Merge Enable");
                         leftMergeBlock.Enabled = true;
                         break;
                     }
-                    //wait ?
-                    if (leftMergeBlock.Enabled && leftMergeBlock.IsConnected && connector.Status ==  MyShipConnectorStatus.Connected && connector.Enabled)
+                    if (leftMergeBlock.Enabled && leftMergeBlock.IsConnected && connector.Status == MyShipConnectorStatus.Connected && connector.Enabled)
                     {
-                        EchoStrings.Add("Left Merge Enabled");
-                        EchoStrings.Add("Connector Connected");
+                        Logs.Add("Left Merge Enabled");
+                        Logs.Add("Connector Connected");
                         CurrentStep++;
-                    }                        
+                    }
                     break;
                 default:
-                    EchoStrings.Clear();
-                    EchoStrings.Add("Loop");
-                    CurrentStep = 0;
+                    var time = StartTime != DateTime.MinValue ? (DateTime.Now - StartTime).TotalSeconds as double? : null;
+                    var speed = time != null? ((CalculateDistance(rightMergeBlock, Me) - Distance) / time.Value) as double?:null;
+                    Logs.Add($"Loop - Time = {time?.ToString()??"?"} seconds. Speed = {speed?.ToString() ?? "?"} m/s");
+                    CurrentStep = (Steps)1;
                     break;
             }
-            if(Wait > 0)
+            if (Wait > 0)
                 Wait--;
-            Echo(string.Join(Environment.NewLine, EchoStrings));
+            Logs.Distance = CalculateDistance(rightMergeBlock, Me);
+            Logs.Echo(CurrentStep);
         }
 
         public Steps CalculateCurrentStep()
         {
-            if (leftMergeBlock.Enabled && leftMergeBlock.IsConnected && connector.Status == MyShipConnectorStatus.Connected && connector.Enabled && rightPiston.Status == PistonStatus.Retracted && rightMergeBlock.IsConnected)
+            if (leftMergeBlock.Enabled && leftMergeBlock.IsConnected && connector.Status == MyShipConnectorStatus.Connected && connector.Enabled && pistons.Status == PistonStatus.Retracted && rightMergeBlock.IsConnected)
                 return Steps.RightDisconnect;
-            if (rightMergeBlock.Enabled == false && (rightPiston.Status == PistonStatus.Retracted || rightPiston.Status == PistonStatus.Extending))
+            if (rightMergeBlock.Enabled == false && pistons.Status != PistonStatus.Extended)
                 return Steps.PistonExtend;
-            if (rightPiston.Status == PistonStatus.Extended && rightMergeBlock.Enabled == false)
+            if (pistons.Status == PistonStatus.Extended && rightMergeBlock.Enabled == false)
                 return Steps.RightConnect;
-            if (rightMergeBlock.Enabled && rightMergeBlock.IsConnected && leftMergeBlock.Enabled 
+            if (rightMergeBlock.Enabled && rightMergeBlock.IsConnected && leftMergeBlock.Enabled
                 && (connector.Enabled || projector.Enabled))
                 return Steps.LeftDisconnect;
-            if (leftMergeBlock.Enabled == false && connector.Enabled == false && (rightPiston.Status == PistonStatus.Extended || rightPiston.Status == PistonStatus.Retracting))
+            if (leftMergeBlock.Enabled == false && connector.Enabled == false && pistons.Status != PistonStatus.Retracted)
                 return Steps.PistonRetract;
-            if (rightPiston.Status == PistonStatus.Retracted && connector.Status == MyShipConnectorStatus.Connectable)
+            if (pistons.Status == PistonStatus.Retracted && (connector.Enabled == false || connector.Status == MyShipConnectorStatus.Connectable))
                 return Steps.LeftConnect;
             throw new Exception("Current step not found");
         }
 
         public void Initialize()
         {
-            EchoStrings.Add("Init");
+            Logs.Add("Init");
             rightMergeBlock = GetBlockFromGroup<IMyShipMergeBlock>("RIGHT");
             leftMergeBlock = GetBlockFromGroup<IMyShipMergeBlock>("LEFT");
-            leftPiston = GetBlockFromGroup<IMyExtendedPistonBase>("PLEFT");
-            rightPiston = GetBlockFromGroup<IMyExtendedPistonBase>("PRIGHT");
+            pistons = new PistonGroup(GetBlocksFromGroup<IMyExtendedPistonBase>("PRIGHT"));
 
             projector = GetBlockFromGroup<IMyProjector>("PROJ");
             connector = GetBlockFromGroup<IMyShipConnector>("CONNECT");
             welders = GetBlocksFromGroup<IMyShipWelder>("Welders");
             grinders = GetBlocksFromGroup<IMyShipGrinder>("Grinders");
+            lcdPanel = GetBlockFromGroup<IMyTextPanel>("LCD");
+            if(lcdPanel != null)
+            {
+                Logs.Add($"LCD Panel found");
+                lcdPanel.ContentType = ContentType.TEXT_AND_IMAGE;
+                Logs.SendLogs = content => { Echo(content); lcdPanel.WriteText(content); };
+            }
+            else
+            {
+                Logs.Add($"No LCD Panel");
+                Logs.SendLogs = content => Echo(content);
+            }
 
-            EchoStrings.Add($"RMerge = {rightMergeBlock.CustomName}");
-            EchoStrings.Add($"LMerge = {leftMergeBlock.CustomName}");
-            EchoStrings.Add($"LPiston = {leftPiston.CustomName}");
-            EchoStrings.Add($"RPiston = {rightPiston.CustomName}");
-            EchoStrings.Add($"Projector = {projector.CustomName}");
-            EchoStrings.Add($"Welders = {string.Join(",", welders.Select(w => w.CustomName))}");
-            EchoStrings.Add($"Grinders = {string.Join(",", grinders.Select(w => w.CustomName))}");
+            Logs.Add($"RMerge = {rightMergeBlock.CustomName}");
+            Logs.Add($"LMerge = {leftMergeBlock.CustomName}");
+            Logs.Add($"RPiston = {pistons.CustomName}");
+            Logs.Add($"Projector = {projector.CustomName}");
+            Logs.Add($"Welders = {string.Join(",", welders.Select(w => w.CustomName))}");
+            Logs.Add($"Grinders = {string.Join(",", grinders.Select(w => w.CustomName))}");
 
             //Setup settings
             //leftPiston.Velocity = -0.5f;
-            //rightPiston.Velocity = -0.5f;
+            //pistons.Velocity = -0.5f;
             grinders.ForEach(g => g.Enabled = true);
             welders.ForEach(w => w.Enabled = true);
             //rightMergeBlock.Enabled = true;
@@ -287,6 +302,13 @@ namespace IngameScript
             var blocks = new List<T>();
             group.GetBlocksOfType(blocks);
             return blocks;
+        }
+
+        public double CalculateDistance(IMyTerminalBlock source, IMyTerminalBlock target)
+        {
+            var sourcePosition = source.GetPosition();
+            var targetPosition = target.GetPosition();
+            return Math.Round(Vector3D.Distance(sourcePosition, targetPosition), 2);
         }
     }
 }
