@@ -50,6 +50,32 @@ namespace IngameScript
                 }
             }
 
+            public float Velocity
+            {
+                get
+                {
+                    return Pistons.FirstOrDefault()?.Velocity ?? 0;
+                }
+                set
+                {
+                    foreach (var piston in Pistons)
+                        piston.Velocity = value;
+                }
+            }
+
+            //public float ShareInertiaTensor
+            //{
+            //    get
+            //    {
+            //        return Pistons.FirstOrDefault()?.ShareInertiaTensor ?? 0;
+            //    }
+            //    set
+            //    {
+            //        foreach (var piston in Pistons)
+            //            piston.ShareInertiaTensor = value;
+            //    }
+            //}
+
             public void Retract()
             {
                 LastCommand = Command.Retract;

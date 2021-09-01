@@ -22,7 +22,6 @@ using VRageMath;
 namespace IngameScript
 {
     // constantiser tout => https://github.com/malware-dev/MDK-SE/wiki/Handling-configuration-and-storage
-    // nb max d'itération ou 0
 
     partial class Program : MyGridProgram
     {
@@ -48,6 +47,9 @@ namespace IngameScript
         private List<IMyShipWelder> welders;
         private List<IMyShipGrinder> grinders;
         private IMyTextPanel lcdPanel;
+        private int iterations;
+        private const int MAX_ITERATIONS = 2;// int.MaxValue;
+        private const int MAX_DISTANCE = 50000;
 
 
         //Technical
@@ -74,9 +76,16 @@ namespace IngameScript
             // or some other means. 
         }
 
+        /// <summary>
+        /// "start" to start process
+        /// "pause" or "stop" to pause it, use start to restart
+        /// "init" to reinit iterations & variables.
+        /// </summary>
+        /// <param name="argument"></param>
+        /// <param name="updateSource"></param>
         public void Main(string argument, UpdateType updateSource)
         {
-            if (!Initialized)
+            if (!Initialized || argument == "init")
                 Initialize();
 
             //if ((updateSource & UpdateType.Terminal) != 0)
@@ -220,15 +229,28 @@ namespace IngameScript
                     break;
                 default:
                     var time = StartTime != DateTime.MinValue ? (DateTime.Now - StartTime).TotalSeconds as double? : null;
-                    var speed = time != null? ((CalculateDistance(rightMergeBlock, Me) - Distance) / time.Value) as double?:null;
-                    Logs.Add($"Loop - Time = {time?.ToString()??"?"} seconds. Speed = {speed?.ToString() ?? "?"} m/s");
+                    var speed = time != null ? ((CalculateDistance(rightMergeBlock, Me) - Distance) / time.Value) as double?:null;
+                    Logs.Add($"Loop ({iterations}) - Time = {time?.ToString()??"?"} seconds. Speed = {speed?.ToString() ?? "?"} m/s");
                     CurrentStep = (Steps)1;
+                    iterations++;
+
+                    if (iterations >= MAX_ITERATIONS)
+                    {
+                        Logs.Add("Max iteration reached");
+                        Runtime.UpdateFrequency = UpdateFrequency.None;
+                    }
+                    if(CalculateDistance(rightMergeBlock, Me) > MAX_DISTANCE )
+                    {
+                        Logs.Add("Max distance reached");
+                        Runtime.UpdateFrequency = UpdateFrequency.None;
+                    }
                     break;
             }
             if (Wait > 0)
                 Wait--;
             Logs.Distance = CalculateDistance(rightMergeBlock, Me);
-            Logs.Echo(CurrentStep);
+            Logs.Iteration = iterations;
+            Logs.Echo(CurrentStep);           
         }
 
         public Steps CalculateCurrentStep()
@@ -280,9 +302,11 @@ namespace IngameScript
             Logs.Add($"Welders = {string.Join(",", welders.Select(w => w.CustomName))}");
             Logs.Add($"Grinders = {string.Join(",", grinders.Select(w => w.CustomName))}");
 
+            iterations = 0;
+
             //Setup settings
             //leftPiston.Velocity = -0.5f;
-            //pistons.Velocity = -0.5f;
+            //pistons.Velocity = -0.4f;
             grinders.ForEach(g => g.Enabled = true);
             welders.ForEach(w => w.Enabled = true);
             //rightMergeBlock.Enabled = true;
@@ -300,7 +324,7 @@ namespace IngameScript
         {
             var group = GridTerminalSystem.GetBlockGroupWithName(groupName);
             var blocks = new List<T>();
-            group.GetBlocksOfType(blocks);
+            group?.GetBlocksOfType(blocks);
             return blocks;
         }
 

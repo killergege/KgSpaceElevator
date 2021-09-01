@@ -7,6 +7,7 @@ namespace IngameScript
         public class LogManager
         {
             public double Distance {get;set;}            
+            public int Iteration { get; set; }
             public Action<string> SendLogs;
             
             private LimitedQueue Logs;
@@ -14,7 +15,7 @@ namespace IngameScript
             public LogManager(Action<string> sendLogs)
             {
                 SendLogs = sendLogs;
-                Logs = new LimitedQueue(11);
+                Logs = new LimitedQueue(15);
             }
 
             public void Add(string log)
@@ -24,7 +25,7 @@ namespace IngameScript
 
             public void Echo(Steps currentStep)
             {
-                SendLogs($"Distance: {Distance}m{Environment.NewLine}{Logs.Dump()}");
+                SendLogs($"Distance: {Distance}m - Iteration {Iteration}{Environment.NewLine}{Logs.Dump()}");
             }
         }
     }
