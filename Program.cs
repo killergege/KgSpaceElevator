@@ -50,6 +50,8 @@ namespace IngameScript
         private int iterations;
         private const int MAX_ITERATIONS = 2;// int.MaxValue;
         private const int MAX_DISTANCE = 50000;
+        private float PISTON_EXTEND_SPEED = -0.03f;
+        private float PISTON_RETRACT_SPEED = 0.5f;
 
 
         //Technical
@@ -122,10 +124,12 @@ namespace IngameScript
                         CurrentStep++;
                     }
                     break;
-                case Steps.PistonExtend:
+                case Steps.PistonExtend:                    
                     if (pistons.Status != PistonStatus.Extended)
                     {
                         //EchoStrings.Add("Piston Extend");
+                        if(Math.Abs(pistons.Velocity) != Math.Abs(PISTON_EXTEND_SPEED))
+                            pistons.Velocity = PISTON_EXTEND_SPEED;
                         pistons.Extend();
                     }
                     if (pistons.Status == PistonStatus.Extended)
@@ -186,6 +190,8 @@ namespace IngameScript
                     if (pistons.Status != PistonStatus.Retracted)
                     {
                         //EchoStrings.Add("Piston Retract");
+                        if (Math.Abs(pistons.Velocity) != Math.Abs(PISTON_RETRACT_SPEED))
+                            pistons.Velocity = PISTON_RETRACT_SPEED;
                         pistons.Retract();
                     }
                     if (pistons.Status == PistonStatus.Retracted)
