@@ -35,7 +35,8 @@ namespace IngameScript
             RightConnect,
             LeftDisconnect,
             PistonRetract,
-            LeftConnect
+            LeftConnect,
+            ReloadComponents
         }
 
         private Steps CurrentStep;
@@ -44,14 +45,16 @@ namespace IngameScript
         private PistonGroup pistons;
         private IMyProjector projector;
         private IMyShipConnector connector;
+        private IMyShipConnector baseConnector;
         private List<IMyShipWelder> welders;
         private List<IMyShipGrinder> grinders;
         private IMyTextPanel lcdPanel;
         private int iterations;
-        private const int MAX_ITERATIONS = 2;// int.MaxValue;
+        private const int MAX_ITERATIONS = int.MaxValue;
         private const int MAX_DISTANCE = 50000;
-        private float PISTON_EXTEND_SPEED = -0.03f;
-        private float PISTON_RETRACT_SPEED = 0.5f;
+        private float PISTON_EXTEND_SPEED = -0.3f;
+        private float PISTON_RETRACT_SPEED = 0.7f;
+        private int WAIT_FOR_RELOAD = 60; //seconds
 
 
         //Technical
@@ -118,7 +121,12 @@ namespace IngameScript
                         rightMergeBlock.Enabled = false;
                         break;
                     }
-                    if (rightMergeBlock.Enabled == false)
+                    if (!projector.Enabled)
+                    {
+                        Logs.Add("Projector Enable");
+                        projector.Enabled = true;
+                    }
+                    if (rightMergeBlock.Enabled == false && projector.Enabled)
                     {
                         Logs.Add("Right Merge Disabled");
                         CurrentStep++;
@@ -215,11 +223,6 @@ namespace IngameScript
                     {
                         Logs.Add("CONNECTOR CANNOT BE CONNECTED");
                     }
-                    if (!projector.Enabled)
-                    {
-                        Logs.Add("Projector Enable");
-                        projector.Enabled = true;
-                    }
                     if (leftMergeBlock.Enabled == false)
                     {
                         Logs.Add("Left Merge Enable");
@@ -233,11 +236,34 @@ namespace IngameScript
                         CurrentStep++;
                     }
                     break;
+                case Steps.ReloadComponents:
+                    if (iterations % 5 != 0 || iterations == 0)
+                    {
+                        CurrentStep++;
+                        Logs.Add("Skipped.");
+                        break;
+                    }
+
+                    if (Wait > 0)
+                        break;
+                    if (Wait == 0 && baseConnector.Status == MyShipConnectorStatus.Connected)
+                    {
+                        Logs.Add("Finished reloading...");
+                        baseConnector.Disconnect();                        
+                        CurrentStep++;
+                    }
+                    else if (Wait == 0)
+                    {
+                        Logs.Add("Reloading...");
+                        baseConnector.Connect();
+                        Wait = WAIT_FOR_RELOAD * 10;
+                    }
+                    break;
                 default:
                     var time = StartTime != DateTime.MinValue ? (DateTime.Now - StartTime).TotalSeconds as double? : null;
                     var speed = time != null ? ((CalculateDistance(rightMergeBlock, Me) - Distance) / time.Value) as double?:null;
-                    Logs.Add($"Loop ({iterations}) - Time = {time?.ToString()??"?"} seconds. Speed = {speed?.ToString() ?? "?"} m/s");
-                    CurrentStep = (Steps)1;
+                    Logs.Add($"Loop ({iterations}) - Time = {time?.ToString()??"?"} seconds. Speed = {speed?.ToString() ?? "?"} m/s");                    
+
                     iterations++;
 
                     if (iterations >= MAX_ITERATIONS)
@@ -245,11 +271,12 @@ namespace IngameScript
                         Logs.Add("Max iteration reached");
                         Runtime.UpdateFrequency = UpdateFrequency.None;
                     }
-                    if(CalculateDistance(rightMergeBlock, Me) > MAX_DISTANCE )
+                    if (CalculateDistance(rightMergeBlock, Me) > MAX_DISTANCE)
                     {
                         Logs.Add("Max distance reached");
                         Runtime.UpdateFrequency = UpdateFrequency.None;
                     }
+                    CurrentStep = (Steps)1;
                     break;
             }
             if (Wait > 0)
@@ -286,6 +313,7 @@ namespace IngameScript
 
             projector = GetBlockFromGroup<IMyProjector>("PROJ");
             connector = GetBlockFromGroup<IMyShipConnector>("CONNECT");
+            baseConnector = GetBlockFromGroup<IMyShipConnector>("BASECONNECTOR");
             welders = GetBlocksFromGroup<IMyShipWelder>("Welders");
             grinders = GetBlocksFromGroup<IMyShipGrinder>("Grinders");
             lcdPanel = GetBlockFromGroup<IMyTextPanel>("LCD");
@@ -307,6 +335,7 @@ namespace IngameScript
             Logs.Add($"Projector = {projector.CustomName}");
             Logs.Add($"Welders = {string.Join(",", welders.Select(w => w.CustomName))}");
             Logs.Add($"Grinders = {string.Join(",", grinders.Select(w => w.CustomName))}");
+            Logs.Add($"Base connector = {baseConnector.CustomName}");
 
             iterations = 0;
 
