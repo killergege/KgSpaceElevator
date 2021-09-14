@@ -54,7 +54,7 @@ namespace IngameScript
         private const int MAX_DISTANCE = 50000;
         private float PISTON_EXTEND_SPEED = -0.3f;
         private float PISTON_RETRACT_SPEED = 0.7f;
-        private int WAIT_FOR_RELOAD = 60; //seconds
+        private int WAIT_FOR_RELOAD = 40; //seconds
 
 
         //Technical
@@ -102,6 +102,8 @@ namespace IngameScript
             {
                 Runtime.UpdateFrequency = UpdateFrequency.Update10;
                 CurrentStep = CalculateCurrentStep();
+                grinders.ForEach(g => g.Enabled = true);
+                welders.ForEach(w => w.Enabled = true);
             }
 
             // -----------------
@@ -237,7 +239,7 @@ namespace IngameScript
                     }
                     break;
                 case Steps.ReloadComponents:
-                    if (iterations % 5 != 0 || iterations == 0)
+                    if (iterations % 2 != 0 || iterations == 0)
                     {
                         CurrentStep++;
                         Logs.Add("Skipped.");
@@ -260,6 +262,9 @@ namespace IngameScript
                     }
                     break;
                 default:
+                    if (baseConnector.Status == MyShipConnectorStatus.Connected)
+                        break;
+
                     var time = StartTime != DateTime.MinValue ? (DateTime.Now - StartTime).TotalSeconds as double? : null;
                     var speed = time != null ? ((CalculateDistance(rightMergeBlock, Me) - Distance) / time.Value) as double?:null;
                     Logs.Add($"Loop ({iterations}) - Time = {time?.ToString()??"?"} seconds. Speed = {speed?.ToString() ?? "?"} m/s");                    
@@ -301,7 +306,7 @@ namespace IngameScript
                 return Steps.PistonRetract;
             if (pistons.Status == PistonStatus.Retracted && (connector.Enabled == false || connector.Status == MyShipConnectorStatus.Connectable))
                 return Steps.LeftConnect;
-            throw new Exception("Current step not found");
+            throw new Exception($"Current step not found : leftMerge.Enabled={leftMergeBlock.Enabled}, leftMerge.Connected={leftMergeBlock.IsConnected}, connector.Status={connector.Status}, connector.Enabled={connector.Enabled}, pistons.Status={pistons.Status}, rightMerge.Enabled={rightMergeBlock.Enabled}, rightMerge.IsConnected={rightMergeBlock.IsConnected}, projector.Enabled={projector.Enabled}");
         }
 
         public void Initialize()
