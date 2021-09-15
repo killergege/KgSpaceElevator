@@ -50,6 +50,21 @@ namespace IngameScript
                 }
             }
 
+            public float MaxLimit
+            {
+                get
+                {
+                    return Pistons.Sum(x => x.MaxLimit);
+                }
+                set 
+                {
+                    foreach (var piston in Pistons)
+                    {
+                        piston.MaxLimit = value > 0 ? value / Pistons.Count : 0;
+                    }
+                }
+            }
+
             public float Velocity
             {
                 get

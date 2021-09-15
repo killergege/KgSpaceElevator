@@ -31,7 +31,8 @@ namespace IngameScript
         {
             None,
             RightDisconnect,
-            PistonExtend,
+            PistonExtendPartial,
+            PistonExtendFinal,
             RightConnect,
             LeftDisconnect,
             PistonRetract,
@@ -54,7 +55,7 @@ namespace IngameScript
         private const int MAX_DISTANCE = 50000;
         private float PISTON_EXTEND_SPEED = -0.3f;
         private float PISTON_RETRACT_SPEED = 0.7f;
-        private int WAIT_FOR_RELOAD = 40; //seconds
+        private int WAIT_FOR_RELOAD = 30; //seconds
 
 
         //Technical
@@ -134,17 +135,42 @@ namespace IngameScript
                         CurrentStep++;
                     }
                     break;
-                case Steps.PistonExtend:                    
+                case Steps.PistonExtendPartial:
                     if (pistons.Status != PistonStatus.Extended)
                     {
-                        //EchoStrings.Add("Piston Extend");
-                        if(Math.Abs(pistons.Velocity) != Math.Abs(PISTON_EXTEND_SPEED))
+                        if (Math.Abs(pistons.Velocity) != Math.Abs(PISTON_EXTEND_SPEED))
                             pistons.Velocity = PISTON_EXTEND_SPEED;
+                        pistons.MaxLimit = 17.3f;
                         pistons.Extend();
                     }
                     if (pistons.Status == PistonStatus.Extended)
                     {
-                        Logs.Add("Piston extended");
+                        Logs.Add("Piston partially extended");
+                        CurrentStep++;
+                    }
+                    break;
+                case Steps.PistonExtendFinal:
+                    if (Wait > 0)
+                        break;
+                    if (projector.RemainingBlocks >= 1)
+                    {
+                        Logs.Add($"Blocks remaining ({projector.RemainingBlocks}). Waiting...");
+                        Wait = 10;
+                        break;
+                    }
+                    if (projector.RemainingBlocks == 0 && pistons.MaxLimit < 20)
+                    {
+                        Wait = 0;
+                        Logs.Add("All blocks built. Piston extend...");
+                        pistons.MaxLimit = 20f;
+                        if (Math.Abs(pistons.Velocity) != Math.Abs(PISTON_EXTEND_SPEED))
+                            pistons.Velocity = PISTON_EXTEND_SPEED;
+                        pistons.Extend();
+                        break;
+                    }
+                    if(projector.RemainingBlocks == 0 && pistons.Status == PistonStatus.Extended && pistons.MaxLimit == 20)
+                    {
+                        Logs.Add("Piston completely extended");
                         CurrentStep++;
                     }
                     break;
@@ -156,8 +182,8 @@ namespace IngameScript
                         Wait = 10;
                         break;
                     }
-                    if (projector.RemainingBlocks > 0)
-                    {                        
+                    if (projector.RemainingBlocks >= 1)
+                    {
                         Logs.Add($"Could not build all blocks (remaining : {projector.RemainingBlocks}) !");
                         Runtime.UpdateFrequency = UpdateFrequency.None;
                     }
@@ -223,7 +249,7 @@ namespace IngameScript
                     }
                     else
                     {
-                        Logs.Add("CONNECTOR CANNOT BE CONNECTED");
+                        Logs.Add("Connector cannot be connected. Waiting...");
                     }
                     if (leftMergeBlock.Enabled == false)
                     {
@@ -239,7 +265,7 @@ namespace IngameScript
                     }
                     break;
                 case Steps.ReloadComponents:
-                    if (iterations % 2 != 0 || iterations == 0)
+                    if (iterations % 10 != 0 || iterations == 0)
                     {
                         CurrentStep++;
                         Logs.Add("Skipped.");
@@ -295,9 +321,11 @@ namespace IngameScript
         {
             if (leftMergeBlock.Enabled && leftMergeBlock.IsConnected && connector.Status == MyShipConnectorStatus.Connected && connector.Enabled && pistons.Status == PistonStatus.Retracted && rightMergeBlock.IsConnected)
                 return Steps.RightDisconnect;
-            if (rightMergeBlock.Enabled == false && pistons.Status != PistonStatus.Extended)
-                return Steps.PistonExtend;
-            if (pistons.Status == PistonStatus.Extended && rightMergeBlock.Enabled == false)
+            if (rightMergeBlock.IsConnected == false && pistons.Status != PistonStatus.Extended)
+                return Steps.PistonExtendPartial;
+            if (rightMergeBlock.IsConnected == false && pistons.MaxLimit < 20)
+                return Steps.PistonExtendFinal;
+            if (pistons.Status == PistonStatus.Extended && rightMergeBlock.Enabled == false && pistons.MaxLimit == 20)
                 return Steps.RightConnect;
             if (rightMergeBlock.Enabled && rightMergeBlock.IsConnected && leftMergeBlock.Enabled
                 && (connector.Enabled || projector.Enabled))
@@ -306,7 +334,7 @@ namespace IngameScript
                 return Steps.PistonRetract;
             if (pistons.Status == PistonStatus.Retracted && (connector.Enabled == false || connector.Status == MyShipConnectorStatus.Connectable))
                 return Steps.LeftConnect;
-            throw new Exception($"Current step not found : leftMerge.Enabled={leftMergeBlock.Enabled}, leftMerge.Connected={leftMergeBlock.IsConnected}, connector.Status={connector.Status}, connector.Enabled={connector.Enabled}, pistons.Status={pistons.Status}, rightMerge.Enabled={rightMergeBlock.Enabled}, rightMerge.IsConnected={rightMergeBlock.IsConnected}, projector.Enabled={projector.Enabled}");
+            throw new Exception($"Current step not found : leftMerge.Enabled={leftMergeBlock.Enabled}, leftMerge.Connected={leftMergeBlock.IsConnected}, connector.Status={connector.Status}, connector.Enabled={connector.Enabled}, pistons.Status={pistons.Status}, rightMerge.Enabled={rightMergeBlock.Enabled}, rightMerge.IsConnected={rightMergeBlock.IsConnected}, projector.Enabled={projector.Enabled}, projector.RemainingBlocks={projector.RemainingBlocks}");
         }
 
         public void Initialize()
