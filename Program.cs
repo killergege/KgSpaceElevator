@@ -52,9 +52,9 @@ namespace IngameScript
         private IMyTextPanel lcdPanel;
         private int iterations;
         private const int MAX_ITERATIONS = int.MaxValue;
-        private const int MAX_DISTANCE = 50000;
-        private float PISTON_EXTEND_SPEED = -0.3f;
-        private float PISTON_RETRACT_SPEED = 0.7f;
+        private const int MAX_DISTANCE = 45000;
+        private float PISTON_EXTEND_SPEED = -0.2f;
+        private float PISTON_RETRACT_SPEED = 0.8f;
         private int WAIT_FOR_RELOAD = 30; //seconds
 
 
@@ -152,13 +152,13 @@ namespace IngameScript
                 case Steps.PistonExtendFinal:
                     if (Wait > 0)
                         break;
-                    if (projector.RemainingBlocks >= 1)
+                    if (projector.RemainingBlocks > 1)
                     {
                         Logs.Add($"Blocks remaining ({projector.RemainingBlocks}). Waiting...");
                         Wait = 10;
                         break;
                     }
-                    if (projector.RemainingBlocks == 0 && pistons.MaxLimit < 20)
+                    if (projector.RemainingBlocks <= 1 && pistons.MaxLimit < 20)
                     {
                         Wait = 0;
                         Logs.Add("All blocks built. Piston extend...");
@@ -172,6 +172,10 @@ namespace IngameScript
                     {
                         Logs.Add("Piston completely extended");
                         CurrentStep++;
+                    }
+                    else
+                    {
+                        //Logs.Add($"Loop : projector.RemainingBlocks={projector.RemainingBlocks}, Wait={Wait}, pistons.MaxLimit={pistons.MaxLimit}, pistons.Status={pistons.Status}");
                     }
                     break;
                 case Steps.RightConnect:
